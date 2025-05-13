@@ -29,12 +29,8 @@ This is a PHP vulnerability scanner designed to identify common security vulnera
   - **Hardcoded Secrets / Path**
   - **No verification**
   - **Regex Problem**
-  - **Shell Commands**
-  - **Windows Commands**
   - **PowerShell Commands**
-  - **CMD Commands**
-  - **VBScript (VBS) Commands**
-  - **Batch File (BAT) Commands**
+
 
 ## Requirements
 
