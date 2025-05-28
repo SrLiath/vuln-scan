@@ -1,6 +1,8 @@
 import os
 import re
 import argparse
+import json
+
 
 patterns = {
     "XSS": [
@@ -19,7 +21,7 @@ patterns = {
         r'(?i)\bprepare\s*\(\s*".*?\$\w+.*?"\s*\)',
     ],
     "RCE": [
-        r'(?i)\b(exec|system|shell_exec|passthru|popen|proc_open|pcntl_exec|spawn|execSync|spawnSync)\s*\(.*\$_(GET|POST|REQUEST|COOKIE).*?\)',
+        r'(?i)\b(system|passthru|popen|proc_open|pcntl_exec|spawn|execSync|spawnSync)\s*\(.*\$_(GET|POST|REQUEST|COOKIE).*?\)',
         r'(?i)\beval\s*\(.*\$_(GET|POST|REQUEST|COOKIE).*?\)',
         r'(?i)\bassert\s*\(.*\$_(GET|POST|REQUEST|COOKIE).*?\)',
         r'(?i)\bcreate_function\s*\(.*\$_(GET|POST|REQUEST|COOKIE).*?\)',
@@ -55,7 +57,7 @@ patterns = {
         r'(?i)\b(require|import)\s*\(.*"http[s]?://.*\$_(GET|POST|REQUEST|COOKIE).*?"\)',
     ],
     "File Operations": [
-        r'(?i)\b(file_get_contents|fopen|readfile|file_put_contents|fwrite|copy|rename|unlink|chmod|rmdir)\s*\(.*\$_(GET|POST|REQUEST|COOKIE).*?\)',
+        r'(?i)\b(fopen|readfile|file_put_contents|copy|rename|unlink|chmod|rmdir)\s*\(.*\$_(GET|POST|REQUEST|COOKIE).*?\)',
         r'(?i)\bmove_uploaded_file\s*\(.*\$_FILES\[.*?\].*?,\s*.*\$_(GET|POST|REQUEST|COOKIE).*?\)',
         r'(?i)\b(fs\.readFileSync|fs\.writeFileSync|fs\.unlinkSync)\s*\(.*\$_(GET|POST|REQUEST|COOKIE).*?\)',
         r'(?i)\bfs\.renameSync\s*\(.*\$_(GET|POST|REQUEST|COOKIE).*?\)',
@@ -75,6 +77,7 @@ patterns = {
         r'(?i)\bextract\s*\(\s*\$_(GET|POST|REQUEST|COOKIE)\s*\)',
         r'(?i)\b(Function)\s*\(\s*.*\$_(GET|POST|REQUEST|COOKIE).*?\)',
         r'(?i)\b(new\s+Function)\s*\(\s*.*\$_(GET|POST|REQUEST|COOKIE).*?\)',
+        r'(?i)\b(base64_encode|base64_decode|FATHURFREAKZ|eval|gzinflate|str_rot13|convert_uu|shell_data|getimagesize|magicboom|exec|shell_exec|fwrite|str_replace|mail|file_get_contents|url_get_contents|symlink|substr)\b',
     ],
     "Info Leak": [
         r'(?i)\bphpinfo\s*\(\s*\)',
@@ -151,12 +154,20 @@ patterns = {
 
 }
 
-def scan_php_files(paths):
+def load_gitignore_spec(root):
+    gitignore_path = os.path.join(root, '.gitignore')
+    if not os.path.isfile(gitignore_path):
+        return None
+    with open(gitignore_path, 'r') as f:
+        lines = f.read().splitlines()
+    return PathSpec.from_lines('gitwildmatch', lines)
+
+def scan_php_files(paths, ignore_git=True):
     results = []
     total_files = 0
     processed_files = 0
 
-    # First, count the total files to be scanned
+    # First count the files to be scanned
     for path in paths:
         if not os.path.exists(path):
             print(f"[!] Path not found: {path}")
@@ -164,10 +175,18 @@ def scan_php_files(paths):
         if os.path.isfile(path) and path.endswith('.php'):
             total_files += 1
         elif os.path.isdir(path):
+            gitignore_spec = None
+            if not ignore_git:
+                gitignore_spec = load_gitignore_spec(path)
             for root, _, files in os.walk(path):
-                total_files += len([f for f in files if f.endswith('.php')])
+                for file in files:
+                    if file.endswith('.php'):
+                        file_path = os.path.join(root, file)
+                        rel_path = os.path.relpath(file_path, path)
+                        if gitignore_spec is None or not gitignore_spec.match_file(rel_path):
+                            total_files += 1
 
-    # Now, process the files
+    # Now process them
     for path in paths:
         if not os.path.exists(path):
             print(f"[!] Path not found: {path}")
@@ -175,11 +194,17 @@ def scan_php_files(paths):
         if os.path.isfile(path) and path.endswith('.php'):
             files_to_scan = [path]
         elif os.path.isdir(path):
+            gitignore_spec = None
+            if not ignore_git:
+                gitignore_spec = load_gitignore_spec(path)
             files_to_scan = []
             for root, _, files in os.walk(path):
                 for file in files:
                     if file.endswith('.php'):
-                        files_to_scan.append(os.path.join(root, file))
+                        file_path = os.path.join(root, file)
+                        rel_path = os.path.relpath(file_path, path)
+                        if gitignore_spec is None or not gitignore_spec.match_file(rel_path):
+                            files_to_scan.append(file_path)
         else:
             print(f"[!] Invalid path or not a .php file: {path}")
             continue
@@ -191,12 +216,9 @@ def scan_php_files(paths):
             except Exception as e:
                 print(f"[!] Error reading file {file_path}: {e}")
                 continue
-            
             processed_files += 1
-            # Show progress every time a file is processed
             progress = (processed_files / total_files) * 100
             print(f"\rReading files... {progress:.2f}% complete", end="")
-
             for line_number, line in enumerate(content, start=1):
                 for vuln_type, regex_list in patterns.items():
                     for pattern in regex_list:
@@ -214,11 +236,14 @@ def scan_php_files(paths):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="PHP Vulnerability Scanner")
-    parser.add_argument("paths", nargs='+', help="PHP file or directory paths to scan")
+    parser.add_argument("paths", nargs='*', help="PHP file or directory paths to scan (default: current directory)")
     parser.add_argument("-o", "--output", help="Output file to save results")
+    parser.add_argument("-a", "--all", action="store_true", help="Scan all files, including those ignored by .gitignore")
     args = parser.parse_args()
 
-    vulnerabilities = scan_php_files(args.paths)
+    target_paths = args.paths if args.paths else [os.getcwd()]
+    ignore_git = not args.all
+    vulnerabilities = scan_php_files(target_paths, ignore_git=ignore_git)
 
     if not vulnerabilities:
         msg = "[+] No vulnerabilities found."
