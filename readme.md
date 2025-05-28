@@ -31,6 +31,43 @@ This is a PHP vulnerability scanner designed to identify common security vulnera
   - **Regex Problem**
   - **PowerShell Commands**
 
+## Additional Features Noted in Code
+
+- ✅ **Support for `.gitignore`**: Files ignored by `.gitignore` are not scanned unless explicitly overridden.
+- ✅ **Flag `--all` or `-a`**: Forces the scanner to check all PHP files, even those ignored by `.gitignore`.
+- ✅ **Progress bar**: Shows live progress during scanning.
+- ✅ **Color-coded output**: Highlights vulnerabilities in red for easy identification.
+- ✅ **Multiple output formats**: Supports saving results in JSON or plain text.
+
+## Features
+
+- Scans PHP files to identify security vulnerabilities.
+- Detects various types of vulnerabilities, including:
+  - **XSS (Cross-Site Scripting)**
+  - **Eval**
+  - **SQLi (SQL Injection)**
+  - **RCE (Remote Code Execution)**
+  - **LFI/RFI (Local/Remote File Inclusion)**
+  - **File Operations**
+  - **Unserialize**
+  - **Deprecated**
+  - **Dynamic Code**
+  - **Info Leak**
+  - **Security Misconfiguration**
+  - **Session Fixation**
+  - **Header Injection**
+  - **Manual Deserialization**
+  - **Insecure Random**
+  - **Weak Hashing**
+  - **Open Redirect**
+  - **Dynamic Class Instantiation**
+  - **Verbose Errors**
+  - **Globals Misuse**
+  - **Hardcoded Secrets / Path**
+  - **No verification**
+  - **Regex Problem**
+  - **PowerShell Commands**
+
 
 ## Requirements
 
